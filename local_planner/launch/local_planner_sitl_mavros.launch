@@ -1,7 +1,7 @@
 <launch>
     <arg name="mavros_transformation" default="0" />
     <arg name="model" default="iris_depth_camera"/>
-    <arg name="world_path" default="$(find local_planner)/../sim/worlds/outdoor_village_3.world" />
+    <arg name="world_path" default="$(find local_planner)/../sim/worlds/testbench/simple_test.sdf" />
 
     <param name="use_sim_time" value="true" />
 

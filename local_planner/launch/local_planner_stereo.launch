@@ -1,6 +1,6 @@
 <launch>
 
-  <arg name="world_path" default="$(find local_planner)/../sim/worlds/simple_obstacle.world" />
+  <arg name="world_path" default="$(find local_planner)/../sim/worlds/testbench/high_wall.world" />
 
   <include file="$(find local_planner)/launch/local_planner_sitl_mavros.launch" >
     <arg name="model" value="iris_stereo_camera" />
@@ -32,9 +32,12 @@
   <!-- rosrun topic_tools transform /stereoV/disparity /stereoV/disparity_image sensor_msgs/Image 'm.image' -->
 
   <!--  <node name="transform" pkg="topic_tools" type="transform"
-      args="/stereo/disparity /stereo/disparity_image sensor_msgs/Image 'm.image'" />
+      args="/stereo/disparity /stereo/disparity_image sensor_msgs/Image 'm.image'" /> 
 
        <node name="transformV" pkg="topic_tools" type="transform"
       args="/stereoV/disparity /stereoV/disparity_image sensor_msgs/Image 'm.image'" /> -->
+
+<node pkg="rosbag" type="record" name="logger"
+args="record -o /tmp/ros-logs /mavros/trajectory/desired /mavros/trajectory/generated"/>
 
 </launch>
