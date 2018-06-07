@@ -95,7 +95,7 @@ void LocalPlannerNode::readParams() {
   nh_.param<double>("goal_y_param", local_planner_.goal_y_param_, 13.0);
   nh_.param<double>("goal_z_param", local_planner_.goal_z_param_, 3.5);
   nh_.param<std::string>("depth_points_topic", depth_points_topic_,
-                         "/camera/depth/points");
+                         "/stereo/points2");
 }
 
 void LocalPlannerNode::updatePlannerInfo() {
