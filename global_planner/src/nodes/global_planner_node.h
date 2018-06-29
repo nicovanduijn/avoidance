@@ -77,8 +77,9 @@ class GlobalPlannerNode {
   ros::Subscriber move_base_simple_sub_;
   ros::Subscriber laser_sensor_sub_;
   ros::Subscriber depth_camera_sub_;
-  ros::Subscriber fcu_input_sub_;
   ros::Subscriber state_sub_;
+  ros::Subscriber fcu_input_sub_;
+
 
   // Publishers
   ros::Publisher three_points_pub_;
@@ -91,7 +92,6 @@ class GlobalPlannerNode {
   ros::Publisher explored_cells_pub_;
   ros::Publisher global_goal_pub_;
   ros::Publisher global_temp_goal_pub_;
-  ros::Publisher mavros_obstacle_free_path_pub_;
 
   tf::TransformListener listener_;
 
@@ -101,9 +101,7 @@ class GlobalPlannerNode {
   void popNextGoal();
   void planPath();
   void setIntermediateGoal();
-  void fillUnusedTrajectoryPoint(mavros_msgs::PositionTarget &point);
-  void transformPathToTrajectory(mavros_msgs::Trajectory &obst_avoid,
-                                 nav_msgs::Path path);
+
 
   void dynamicReconfigureCallback(
       global_planner::GlobalPlannerNodeConfig& config, uint32_t level);
@@ -115,8 +113,9 @@ class GlobalPlannerNode {
   void laserSensorCallback(const sensor_msgs::LaserScan& msg);
   void octomapFullCallback(const octomap_msgs::Octomap& msg);
   void depthCameraCallback(const sensor_msgs::PointCloud2& msg);
-  void fcuInputGoalCallback(const mavros_msgs::Trajectory &msg);
   void stateCallback(const mavros_msgs::State msg);
+  void fcuInputGoalCallback(const mavros_msgs::Trajectory &msg);
+
 
   void publishGoal(const GoalCell& goal);
   void publishPath();

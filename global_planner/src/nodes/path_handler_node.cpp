@@ -2,7 +2,7 @@
 
 namespace global_planner {
 
-PathHandlerNode::PathHandlerNode() {
+PathHandlerNode::PathHandlerNode(): offboard_(false), mission_(false), armed_(false) {
   nh_ = ros::NodeHandle("~");
 
   // Set up Dynamic Reconfigure Server
@@ -23,8 +23,10 @@ PathHandlerNode::PathHandlerNode() {
       nh_.subscribe("/path_with_risk", 1, &PathHandlerNode::receivePath, this);
   ground_truth_sub_ = nh_.subscribe("/mavros/local_position/pose", 1,
                                     &PathHandlerNode::positionCallback, this);
+   state_sub_ =
+      nh_.subscribe("/mavros/state", 1, &PathHandlerNode::stateCallback, this);
 
-  // Advertice topics
+  // Advertise topics
   mavros_waypoint_publisher_ = nh_.advertise<geometry_msgs::PoseStamped>(
       "/mavros/setpoint_position/local", 10);
   current_waypoint_publisher_ =
@@ -33,6 +35,8 @@ PathHandlerNode::PathHandlerNode() {
       nh_.advertise<nav_msgs::Path>("/three_point_path", 10);
   three_point_msg_publisher_ =
       nh_.advertise<global_planner::ThreePointMsg>("/three_point_msg", 10);
+  mavros_obstacle_free_path_pub_ = nh_.advertise<mavros_msgs::Trajectory>(
+      "/mavros/trajectory/generated", 10);
   // avoidance_triplet_msg_publisher_ =
   // nh_.advertise<mavros_msgs::AvoidanceTriplet>("/mavros/avoidance_triplet",
   // 10);
@@ -212,7 +216,15 @@ void PathHandlerNode::publishSetpoint() {
                           setpoint);
 
   // Publish setpoint to Mavros
-  mavros_waypoint_publisher_.publish(setpoint);
+  if(offboard_){
+      mavros_waypoint_publisher_.publish(setpoint);
+  }
+  else if(mission_){
+    mavros_msgs::Trajectory obst_free_path = {};
+    transformPoseToTrajectory(obst_free_path, setpoint);
+    mavros_obstacle_free_path_pub_.publish(obst_free_path);
+  }
+
 }
 
 // Send a 3-point message representing the current path
@@ -256,6 +268,61 @@ void PathHandlerNode::publishThreePointMsg() {
   // avoidance_triplet.max_acc = risk;
   // avoidance_triplet.acc_per_err = risk;
   // avoidance_triplet_msg_publisher_.publish(avoidance_triplet);
+}
+
+void PathHandlerNode::stateCallback(const mavros_msgs::State msg) {
+  armed_ = msg.armed;
+
+  if (msg.mode == "AUTO.MISSION") {
+    offboard_ = false;
+    mission_ = true;
+  }
+
+  if (msg.mode == "OFFBOARD") {
+    offboard_ = true;
+    mission_ = false;
+  }
+}
+
+void PathHandlerNode::transformPoseToTrajectory(
+    mavros_msgs::Trajectory &obst_avoid, geometry_msgs::PoseStamped pose) {
+  obst_avoid.header = pose.header;
+  obst_avoid.type = 0;  // MAV_TRAJECTORY_REPRESENTATION::WAYPOINTS
+  obst_avoid.point_1.position.x = pose.pose.position.x;
+  obst_avoid.point_1.position.y = pose.pose.position.y;
+  obst_avoid.point_1.position.z = pose.pose.position.z;
+  obst_avoid.point_1.velocity.x = NAN;
+  obst_avoid.point_1.velocity.y = NAN;
+  obst_avoid.point_1.velocity.z = NAN;
+  obst_avoid.point_1.acceleration_or_force.x = NAN;
+  obst_avoid.point_1.acceleration_or_force.y = NAN;
+  obst_avoid.point_1.acceleration_or_force.z = NAN;
+  obst_avoid.point_1.yaw = tf::getYaw(pose.pose.orientation);
+  obst_avoid.point_1.yaw_rate = NAN;
+
+  fillUnusedTrajectoryPoint(obst_avoid.point_2);
+  fillUnusedTrajectoryPoint(obst_avoid.point_3);
+  fillUnusedTrajectoryPoint(obst_avoid.point_4);
+  fillUnusedTrajectoryPoint(obst_avoid.point_5);
+
+  obst_avoid.time_horizon = {NAN, NAN, NAN, NAN, NAN};
+
+  obst_avoid.point_valid = {true, false, false, false, false};
+}
+
+void PathHandlerNode::fillUnusedTrajectoryPoint(
+    mavros_msgs::PositionTarget &point) {
+  point.position.x = NAN;
+  point.position.y = NAN;
+  point.position.z = NAN;
+  point.velocity.x = NAN;
+  point.velocity.y = NAN;
+  point.velocity.z = NAN;
+  point.acceleration_or_force.x = NAN;
+  point.acceleration_or_force.y = NAN;
+  point.acceleration_or_force.z = NAN;
+  point.yaw = NAN;
+  point.yaw_rate = NAN;
 }
 
 }  // namespace global_planner

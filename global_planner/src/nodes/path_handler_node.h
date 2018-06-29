@@ -12,6 +12,8 @@
 #include <nav_msgs/Path.h>
 #include <ros/ros.h>
 #include <tf/transform_datatypes.h>
+#include <mavros_msgs/State.h>
+#include <mavros_msgs/Trajectory.h>
 
 #include <global_planner/PathHandlerNodeConfig.h>
 #include <global_planner/PathWithRiskMsg.h>
@@ -46,6 +48,7 @@ class PathHandlerNode {
   geometry_msgs::PoseStamped current_goal_;
   geometry_msgs::PoseStamped last_goal_;
   geometry_msgs::PoseStamped last_pos_;
+  bool offboard_, mission_, armed_;
 
   std::vector<geometry_msgs::PoseStamped> path_;
   std::map<tf::Vector3, double> path_risk_;
@@ -54,12 +57,15 @@ class PathHandlerNode {
   ros::Subscriber path_sub_;
   ros::Subscriber path_with_risk_sub_;
   ros::Subscriber ground_truth_sub_;
+  ros::Subscriber state_sub_;
 
   ros::Publisher mavros_waypoint_publisher_;
   ros::Publisher current_waypoint_publisher_;
   ros::Publisher three_point_path_publisher_;
   ros::Publisher three_point_msg_publisher_;
   ros::Publisher avoidance_triplet_msg_publisher_;
+  ros::Publisher mavros_obstacle_free_path_pub_;
+
 
   tf::TransformListener listener_;
 
@@ -69,6 +75,10 @@ class PathHandlerNode {
   bool isCloseToGoal();
   double getRiskOfCurve(const std::vector<geometry_msgs::PoseStamped>& poses);
   void setCurrentPath(const std::vector<geometry_msgs::PoseStamped>& poses);
+  void transformPoseToTrajectory(
+    mavros_msgs::Trajectory &obst_avoid, geometry_msgs::PoseStamped pose);
+  void fillUnusedTrajectoryPoint(mavros_msgs::PositionTarget &point);
+
   // Callbacks
   void dynamicReconfigureCallback(global_planner::PathHandlerNodeConfig& config,
                                   uint32_t level);
@@ -76,6 +86,7 @@ class PathHandlerNode {
   void receivePath(const nav_msgs::Path& msg);
   void receivePathWithRisk(const PathWithRiskMsg& msg);
   void positionCallback(const geometry_msgs::PoseStamped& pose_msg);
+  void stateCallback(const mavros_msgs::State msg);
   // Publishers
   void publishSetpoint();
   void publishThreePointMsg();
