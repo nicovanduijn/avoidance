@@ -10,6 +10,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
+  mavros_msgs
   dynamic_reconfigure
   message_generation
   tf

@@ -2,7 +2,7 @@
 
 namespace global_planner {
 
-GlobalPlannerNode::GlobalPlannerNode() {
+GlobalPlannerNode::GlobalPlannerNode(): goal_(0.0, 0.0, 0.0), offboard_(false), mission_(false), armed_(false)  {
   nh_ = ros::NodeHandle("~");
 
   // Set up Dynamic Reconfigure Server
@@ -32,6 +32,10 @@ GlobalPlannerNode::GlobalPlannerNode() {
       nh_.subscribe("/scan", 1, &GlobalPlannerNode::laserSensorCallback, this);
   depth_camera_sub_ = nh_.subscribe(
       "/camera/depth/points", 1, &GlobalPlannerNode::depthCameraCallback, this);
+  fcu_input_sub_ = nh_.subscribe("/mavros/trajectory/desired", 1,
+                                 &GlobalPlannerNode::fcuInputGoalCallback, this);
+  state_sub_ =
+      nh_.subscribe("/mavros/state", 1, &GlobalPlannerNode::stateCallback, this);
 
   // Publishers
   three_points_pub_ = nh_.advertise<nav_msgs::Path>("/three_points", 10);
@@ -50,6 +54,8 @@ GlobalPlannerNode::GlobalPlannerNode() {
       nh_.advertise<geometry_msgs::PointStamped>("/global_temp_goal", 10);
   explored_cells_pub_ =
       nh_.advertise<visualization_msgs::MarkerArray>("/explored_cells", 10);
+  mavros_obstacle_free_path_pub_ = nh_.advertise<mavros_msgs::Trajectory>(
+      "/mavros/trajectory/generated", 10);
 
   actual_path_.header.frame_id = "/world";
   listener_.waitForTransform("/fcu", "/world", ros::Time(0),
@@ -71,6 +77,7 @@ void GlobalPlannerNode::readParams() {
 void GlobalPlannerNode::setNewGoal(const GoalCell& goal) {
   ROS_INFO("========== Set goal : %s ==========", goal.asString().c_str());
   global_planner_.setGoal(goal);
+  goal_ = goal;
   publishGoal(goal);
   planPath();
 }
@@ -324,6 +331,35 @@ void GlobalPlannerNode::depthCameraCallback(
   }
 }
 
+void GlobalPlannerNode::fcuInputGoalCallback(
+    const mavros_msgs::Trajectory &msg) {
+  if (mission_ && (msg.point_valid[1] == true) &&
+      ((std::fabs(goal_.toPoint().x - msg.point_2.position.x) >
+        0.001) ||
+       (std::fabs(goal_.toPoint().y - msg.point_2.position.y) >
+        0.001) ||
+       (std::fabs(goal_.toPoint().z - msg.point_2.position.z) >
+        0.001))) {
+    setNewGoal(GoalCell(msg.point_2.position.x, msg.point_2.position.y,
+                     msg.point_2.position.z, clicked_goal_radius_));
+  }
+
+}
+
+void GlobalPlannerNode::stateCallback(const mavros_msgs::State msg) {
+  armed_ = msg.armed;
+
+  if (msg.mode == "AUTO.MISSION") {
+    offboard_ = false;
+    mission_ = true;
+  }
+
+  if (msg.mode == "OFFBOARD") {
+    offboard_ = true;
+    mission_ = false;
+  }
+}
+
 // Publish the position of goal
 void GlobalPlannerNode::publishGoal(const GoalCell& goal) {
   geometry_msgs::PointStamped pointMsg;
@@ -398,6 +434,49 @@ void GlobalPlannerNode::printPointInfo(double x, double y, double z) {
   // Update explored cells
   publishExploredCells();
   printPointStats(&global_planner_, x, y, z);
+}
+
+
+
+void GlobalPlannerNode::transformPathToTrajectory(mavros_msgs::Trajectory &obst_avoid,
+                                 nav_msgs::Path path){
+  obst_avoid.header = path.header;
+  obst_avoid.type = 0;  // MAV_TRAJECTORY_REPRESENTATION::WAYPOINTS
+  obst_avoid.point_1.position.x = path.poses.front().pose.position.x;
+  obst_avoid.point_1.position.y = path.poses.front().pose.position.y;
+  obst_avoid.point_1.position.z = path.poses.front().pose.position.z;
+  obst_avoid.point_1.velocity.x = NAN;
+  obst_avoid.point_1.velocity.y = NAN;
+  obst_avoid.point_1.velocity.z = NAN;
+  obst_avoid.point_1.acceleration_or_force.x = NAN;
+  obst_avoid.point_1.acceleration_or_force.y = NAN;
+  obst_avoid.point_1.acceleration_or_force.z = NAN;
+  obst_avoid.point_1.yaw = tf::getYaw(path.poses.front().pose.orientation);
+  obst_avoid.point_1.yaw_rate = NAN;
+
+  fillUnusedTrajectoryPoint(obst_avoid.point_2);
+  fillUnusedTrajectoryPoint(obst_avoid.point_3);
+  fillUnusedTrajectoryPoint(obst_avoid.point_4);
+  fillUnusedTrajectoryPoint(obst_avoid.point_5);
+
+  obst_avoid.time_horizon = {NAN, NAN, NAN, NAN, NAN};
+
+  obst_avoid.point_valid = {true, false, false, false, false};
+}
+
+void GlobalPlannerNode::fillUnusedTrajectoryPoint(
+    mavros_msgs::PositionTarget &point) {
+  point.position.x = NAN;
+  point.position.y = NAN;
+  point.position.z = NAN;
+  point.velocity.x = NAN;
+  point.velocity.y = NAN;
+  point.velocity.z = NAN;
+  point.acceleration_or_force.x = NAN;
+  point.acceleration_or_force.y = NAN;
+  point.acceleration_or_force.z = NAN;
+  point.yaw = NAN;
+  point.yaw_rate = NAN;
 }
 
 }  // namespace global_planner
