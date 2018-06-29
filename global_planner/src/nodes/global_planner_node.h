@@ -58,7 +58,7 @@ class GlobalPlannerNode {
   int num_pos_msg_ = 0;
   std::vector<geometry_msgs::PoseStamped> last_clicked_points;
   bool offboard_, mission_, armed_;
-  GoalCell goal_;
+  mavros_msgs::PositionTarget goal_;
 
   // Dynamic Reconfiguration
   double clicked_goal_alt_;

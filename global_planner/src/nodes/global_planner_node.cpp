@@ -2,7 +2,7 @@
 
 namespace global_planner {
 
-GlobalPlannerNode::GlobalPlannerNode(): offboard_(false), mission_(false), armed_(false), goal_(0.0, 0.0, 0.0){
+GlobalPlannerNode::GlobalPlannerNode(): offboard_(false), mission_(false), armed_(false){
   nh_ = ros::NodeHandle("~");
 
   // Set up Dynamic Reconfigure Server
@@ -77,7 +77,6 @@ void GlobalPlannerNode::readParams() {
 void GlobalPlannerNode::setNewGoal(const GoalCell& goal) {
   ROS_INFO("========== Set goal : %s ==========", goal.asString().c_str());
   global_planner_.setGoal(goal);
-  goal_ = goal;
   publishGoal(goal);
   planPath();
 }
@@ -348,15 +347,16 @@ void GlobalPlannerNode::stateCallback(const mavros_msgs::State msg) {
 void GlobalPlannerNode::fcuInputGoalCallback(
     const mavros_msgs::Trajectory &msg) {
   if (mission_ && (msg.point_valid[1] == true) &&
-      ((std::fabs(goal_.toPoint().x - msg.point_2.position.x) >
+      ((std::fabs(goal_.position.x - msg.point_2.position.x) >
         0.001) ||
-       (std::fabs(goal_.toPoint().y - msg.point_2.position.y) >
+       (std::fabs(goal_.position.y - msg.point_2.position.y) >
         0.001) ||
-       (std::fabs(goal_.toPoint().z - msg.point_2.position.z) >
+       (std::fabs(goal_.position.z - msg.point_2.position.z) >
         0.001))) {
+    goal_ = msg.point_2;
     setNewGoal(GoalCell(msg.point_2.position.x, msg.point_2.position.y,
                      msg.point_2.position.z, clicked_goal_radius_));
-  }
+  //}
 
 }
 

@@ -216,10 +216,11 @@ void PathHandlerNode::publishSetpoint() {
                           setpoint);
 
   // Publish setpoint to Mavros
-  if(offboard_){
+  if(!mission_){ 
       mavros_waypoint_publisher_.publish(setpoint);
   }
-  else if(mission_){
+  else{
+    ROS_INFO("Publishing trajectory");
     mavros_msgs::Trajectory obst_free_path = {};
     transformPoseToTrajectory(obst_free_path, setpoint);
     mavros_obstacle_free_path_pub_.publish(obst_free_path);
