@@ -1,4 +1,5 @@
 #include "stupid_planner.hpp"
+//#define POSITION_SETPOINTS
 
 StupidPlanner::StupidPlanner() {
   nh_ = ros::NodeHandle("~");
@@ -16,14 +17,14 @@ StupidPlanner::~StupidPlanner() {};
 void StupidPlanner::fcuInputGoalCallback(
     const mavros_msgs::Trajectory& msg) {
 
-  ROS_INFO("input: %.3f, %.3f, %.3f | %.3f, %.3f, %.3f",msg.point_1.position.x, msg.point_1.position.y, msg.point_1.position.z, msg.point_2.position.x, msg.point_2.position.y, msg.point_2.position.z);
+  ROS_INFO("input p1: %.3f, %.3f, %.3f | %.3f, %.3f, %.3f",msg.point_1.position.x, msg.point_1.position.y, msg.point_1.position.z, msg.point_1.velocity.x, msg.point_1.velocity.y, msg.point_1.velocity.z);
  
   mavros_msgs::Trajectory obst_free_path = {};
   transformPoseToObstacleAvoidance(obst_free_path, msg);
   mavros_obstacle_free_path_pub_.publish(obst_free_path);
-  
+
   ROS_INFO("pub: %.3f, %.3f, %.3f | %.3f, %.3f, %.3f",obst_free_path.point_1.position.x, obst_free_path.point_1.position.y, obst_free_path.point_1.position.z,
-           obst_free_path.point_2.position.x, obst_free_path.point_2.position.y, obst_free_path.point_2.position.z);
+           obst_free_path.point_1.velocity.x, obst_free_path.point_1.velocity.y, obst_free_path.point_1.velocity.z);
 }
 
 void StupidPlanner::fillUnusedTrajectoryPoint(
@@ -44,11 +45,13 @@ void StupidPlanner::fillUnusedTrajectoryPoint(
 void StupidPlanner::transformPoseToObstacleAvoidance(
     mavros_msgs::Trajectory& obst_avoid, const mavros_msgs::Trajectory& msg) {
   obst_avoid.header = msg.header;
+  obst_avoid.type = 0;
 
+
+#ifdef POSITION_SETPOINTS
   double x_dir =0.0d, y_dir = 0.0d, z_dir=1.0d;
   // If no goal is defined, just return current position
 if(msg.point_valid[1] == true && msg.point_1.position.z >= 0.5f){
-
      x_dir = (msg.point_2.position.x - msg.point_1.position.x);
      y_dir = (msg.point_2.position.y - msg.point_1.position.y);
      z_dir = (msg.point_2.position.z - msg.point_1.position.z);
@@ -58,21 +61,30 @@ if(msg.point_valid[1] == true && msg.point_1.position.z >= 0.5f){
       y_dir /= mag;
       z_dir /= mag;
      }
-     ROS_INFO("Adjusting setpoint by: %.3f, %.3f, %.3f", x_dir, y_dir, z_dir);
 }
 
-  obst_avoid.type = 0;
   obst_avoid.point_1.position.x = msg.point_1.position.x + x_dir;
   obst_avoid.point_1.position.y = msg.point_1.position.y + y_dir;
   obst_avoid.point_1.position.z = msg.point_1.position.z + z_dir;
   obst_avoid.point_1.velocity.x = NAN;
   obst_avoid.point_1.velocity.y = NAN;
   obst_avoid.point_1.velocity.z = NAN;
+  obst_avoid.point_1.yaw = atan2(y_dir,x_dir);
+  obst_avoid.point_1.yaw_rate = NAN;
+#else
+  obst_avoid.point_1.position.x = NAN;
+  obst_avoid.point_1.position.y = NAN;
+  obst_avoid.point_1.position.z = NAN;
+  obst_avoid.point_1.velocity.x = msg.point_1.velocity.x;
+  obst_avoid.point_1.velocity.y = msg.point_1.velocity.y;
+  obst_avoid.point_1.velocity.z = msg.point_1.velocity.z;
+  obst_avoid.point_1.yaw = NAN;
+  obst_avoid.point_1.yaw_rate = msg.point_1.yaw_rate;
+#endif
+
   obst_avoid.point_1.acceleration_or_force.x = NAN;
   obst_avoid.point_1.acceleration_or_force.y = NAN;
   obst_avoid.point_1.acceleration_or_force.z = NAN;
-  obst_avoid.point_1.yaw = atan2(y_dir,x_dir);
-  obst_avoid.point_1.yaw_rate = NAN;
 
   fillUnusedTrajectoryPoint(obst_avoid.point_2);
   fillUnusedTrajectoryPoint(obst_avoid.point_3);
