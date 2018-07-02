@@ -21,6 +21,7 @@ void StupidPlanner::fcuInputGoalCallback(
   mavros_msgs::Trajectory obst_free_path = {};
   transformPoseToObstacleAvoidance(obst_free_path, msg);
   mavros_obstacle_free_path_pub_.publish(obst_free_path);
+  
   ROS_INFO("pub: %.3f, %.3f, %.3f | %.3f, %.3f, %.3f",obst_free_path.point_1.position.x, obst_free_path.point_1.position.y, obst_free_path.point_1.position.z,
            obst_free_path.point_2.position.x, obst_free_path.point_2.position.y, obst_free_path.point_2.position.z);
 }
@@ -57,7 +58,7 @@ if(msg.point_valid[1] == true && msg.point_1.position.z >= 0.5f){
       y_dir /= mag;
       z_dir /= mag;
      }
-     ROS_INFO("Adjusted direction to %.3f, %.3f, %.3f", x_dir, y_dir, z_dir);
+     ROS_INFO("Adjusting setpoint by: %.3f, %.3f, %.3f", x_dir, y_dir, z_dir);
 }
 
   obst_avoid.type = 0;
