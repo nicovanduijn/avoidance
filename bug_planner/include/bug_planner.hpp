@@ -25,12 +25,25 @@ private:
 
   geometry_msgs::PoseStamped current_pose_;
   geometry_msgs::PoseStamped goal_pose_;
-  const float CLOSEST_OBSTACLE_THRESHOLD = 3.0;
-  const float YAW_RATE = 0.5;
-  const float OBS_TIME_THR = 2.0;
-
   ros::Time time_of_last_obstacle_;
   bool obstacle_in_sight_;
+
+  // Hard-coded parameters
+
+  // start breaking when obstacles are closer than this [m]
+  const float CLOSEST_OBSTACLE_THRESHOLD_M = 3.0;
+
+  // yaw rate to use when looking for a free direction
+  const float YAW_RATE_RAD_P_S = 0.5;
+
+  // time to fly straight before turning toward goal when a new free direction is found
+  const float FLY_STRAIGHT_FOR_S = 2.0;
+
+  // fraction of PX4's commanded velocity to use. (using full speed is too fast to stop)
+  const float FRACTION_OF_DESIRED_SPEED = 0.3;
+
+  // Accept current heading as "facing the goal" when this many radians off
+  const float FACING_GOAL_YAW_THR_RAD = 0.1;
 
   void fcuInputGoalCallback(const mavros_msgs::Trajectory& msg);
   void fillUnusedTrajectoryPoint(mavros_msgs::PositionTarget& point);

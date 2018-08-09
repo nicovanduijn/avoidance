@@ -79,11 +79,11 @@ void BugPlanner::avoid(mavros_msgs::Trajectory& obst_avoid, const mavros_msgs::T
     obst_avoid.point_1.velocity.x = 0.0f;
     obst_avoid.point_1.velocity.y = 0.0f;
     obst_avoid.point_1.velocity.z = 0.0f;
-    obst_avoid.point_1.yaw_rate = YAW_RATE;
+    obst_avoid.point_1.yaw_rate = YAW_RATE_RAD_P_S;
   }
 
   // if there is no obstacle ahead, but we have recently had one, go straight
-  else if (ros::Time::now().toSec() - time_of_last_obstacle_.toSec() < OBS_TIME_THR)
+  else if (ros::Time::now().toSec() - time_of_last_obstacle_.toSec() < FLY_STRAIGHT_FOR_S)
   {
     obst_avoid.point_1.velocity.x = cos(msg.point_1.yaw) * 1.5;
     obst_avoid.point_1.velocity.y = sin(msg.point_1.yaw) * 1.5;
@@ -94,7 +94,7 @@ void BugPlanner::avoid(mavros_msgs::Trajectory& obst_avoid, const mavros_msgs::T
   // if there's no obstacle ahead, but we're not facing the goal, just yaw and/or climb/descend
   else if (std::fabs(tf::getYaw(current_pose_.pose.orientation) -
                      (atan2(goal_pose_.pose.position.y - current_pose_.pose.position.y,
-                            goal_pose_.pose.position.x - current_pose_.pose.position.x))) > 0.1)
+                            goal_pose_.pose.position.x - current_pose_.pose.position.x))) > FACING_GOAL_YAW_THR_RAD)
   {
     obst_avoid.point_1.velocity.x = 0.0f;
     obst_avoid.point_1.velocity.y = 0.0f;
@@ -105,8 +105,8 @@ void BugPlanner::avoid(mavros_msgs::Trajectory& obst_avoid, const mavros_msgs::T
   // if there is no obstacle ahead, and it's been a while that there was, we can fly toward the goal
   else
   {
-    obst_avoid.point_1.velocity.x = msg.point_1.velocity.x * 0.3;
-    obst_avoid.point_1.velocity.y = msg.point_1.velocity.y * 0.3;
+    obst_avoid.point_1.velocity.x = msg.point_1.velocity.x * FRACTION_OF_DESIRED_SPEED;
+    obst_avoid.point_1.velocity.y = msg.point_1.velocity.y * FRACTION_OF_DESIRED_SPEED;
     obst_avoid.point_1.velocity.z = msg.point_1.velocity.z;
     obst_avoid.point_1.yaw_rate = msg.point_1.yaw_rate;
   }
@@ -126,7 +126,7 @@ void BugPlanner::depthCameraCallback(const sensor_msgs::PointCloud2& msg)
 
   // Look through the point cloud, only if we have reached a height higher than our
   // CLOSEST_OBSTACLE_THRESHOLD since otherwise the ground would trigger an obstacle
-  if (current_pose_.pose.position.z > CLOSEST_OBSTACLE_THRESHOLD)
+  if (current_pose_.pose.position.z > CLOSEST_OBSTACLE_THRESHOLD_M)
   {
     for (const auto& p : cloud)
     {
@@ -134,7 +134,7 @@ void BugPlanner::depthCameraCallback(const sensor_msgs::PointCloud2& msg)
       {
         // points in camera frame -> if p.y is close to zero it is roughly on the same height as the drone
         if (p.y > -0.5 && p.y < 0.5 &&
-            (p.x * p.x + p.y * p.y + p.z * p.z) < CLOSEST_OBSTACLE_THRESHOLD * CLOSEST_OBSTACLE_THRESHOLD)
+            (p.x * p.x + p.y * p.y + p.z * p.z) < CLOSEST_OBSTACLE_THRESHOLD_M * CLOSEST_OBSTACLE_THRESHOLD_M)
         {
           time_of_last_obstacle_ = ros::Time::now();
           obstacle_in_sight_ = true;
