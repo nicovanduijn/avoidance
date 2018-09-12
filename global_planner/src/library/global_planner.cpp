@@ -522,10 +522,10 @@ bool GlobalPlanner::getGlobalPath() {
     return false;
   } else if (current_cell_blocked_) {
     // If current position is occupied the way back is published
-    ROS_INFO("Current position is occupied, going back.");
+//    ROS_INFO("Current position is occupied, going back.");
     // goBack();
     // return true;
-    return false;
+//    return false;
   } else {
     // Both current position and goal are free, try to find a path
     std::vector<Cell> path;
