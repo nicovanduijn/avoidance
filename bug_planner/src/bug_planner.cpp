@@ -6,9 +6,10 @@ BugPlanner::BugPlanner() : time_of_last_obstacle_(ros::Time::now()), obstacle_in
 
   fcu_input_sub_ = nh_.subscribe("/mavros/trajectory/desired", 1, &BugPlanner::fcuInputGoalCallback, this);
   depth_cam_sub_ = nh_.subscribe("/camera/depth/points", 1, &BugPlanner::depthCameraCallback, this);
+  pose_sub_ = nh_.subscribe("/mavros/local_position/pose", 1, &BugPlanner::poseCallback, this);
   mavros_obstacle_free_path_pub_ = nh_.advertise<mavros_msgs::Trajectory>("/mavros/trajectory/generated", 10);
-  current_pos_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/current_pos", 10);
-  current_goal_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/goal_pos", 10);
+  current_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/current_pose", 10);
+  goal_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/goal_pose", 10);
 }
 
 BugPlanner::~BugPlanner(){};
@@ -37,13 +38,20 @@ void BugPlanner::fcuInputGoalCallback(const mavros_msgs::Trajectory& msg)
   goal_pose_.pose.orientation.x = q.getX();
   goal_pose_.pose.orientation.y = q.getY();
   goal_pose_.pose.orientation.z = q.getZ();
+}
 
-  mavros_msgs::Trajectory adjusted_traj_ = {};
-  avoid(adjusted_traj_, msg);
-
-  mavros_obstacle_free_path_pub_.publish(adjusted_traj_);
-  current_pos_pub_.publish(current_pose_);
-  current_goal_pub_.publish(goal_pose_);
+void BugPlanner::poseCallback(const geometry_msgs::PoseStamped& msg) {
+	current_pose_ = msg;
+	current_yaw_ = tf::getYaw(current_pose_.pose.orientation);
+	x_dir_ = (goal_pose_.pose.position.x - current_pose_.pose.position.x);
+	y_dir_ = (goal_pose_.pose.position.y - current_pose_.pose.position.y);
+	z_dir_ = (goal_pose_.pose.position.z - current_pose_.pose.position.z);
+	double mag = sqrt(x_dir_ * x_dir_ + y_dir_ * y_dir_ + z_dir_ * z_dir_);
+	if(mag >= DESIRED_SPEED_M_P_S){// only normalize if far away from goal
+	  x_dir_ /= mag/DESIRED_SPEED_M_P_S;
+	  y_dir_ /= mag/DESIRED_SPEED_M_P_S;
+	  z_dir_ /= mag/DESIRED_SPEED_M_P_S;
+	}
 }
 
 void BugPlanner::fillUnusedTrajectoryPoint(mavros_msgs::PositionTarget& point)
@@ -61,9 +69,10 @@ void BugPlanner::fillUnusedTrajectoryPoint(mavros_msgs::PositionTarget& point)
   point.yaw_rate = NAN;
 }
 
-void BugPlanner::avoid(mavros_msgs::Trajectory& obst_avoid, const mavros_msgs::Trajectory& msg)
+void BugPlanner::avoid()
 {
-  obst_avoid.header = msg.header;
+  mavros_msgs::Trajectory obst_avoid = {};
+  obst_avoid.header = current_pose_.header;
   obst_avoid.type = 0;
   obst_avoid.point_1.position.x = NAN;
   obst_avoid.point_1.position.y = NAN;
@@ -80,35 +89,41 @@ void BugPlanner::avoid(mavros_msgs::Trajectory& obst_avoid, const mavros_msgs::T
     obst_avoid.point_1.velocity.y = 0.0f;
     obst_avoid.point_1.velocity.z = 0.0f;
     obst_avoid.point_1.yaw_rate = YAW_RATE_RAD_P_S;
+    std::cout << "Obstacle ahead!" << std::endl;
   }
 
   // if there is no obstacle ahead, but we have recently had one, go straight
   else if (ros::Time::now().toSec() - time_of_last_obstacle_.toSec() < FLY_STRAIGHT_FOR_S)
   {
-    obst_avoid.point_1.velocity.x = cos(msg.point_1.yaw) * 1.5;
-    obst_avoid.point_1.velocity.y = sin(msg.point_1.yaw) * 1.5;
+	std::cout << "No obstacle ahead, but recently there was" << std::endl;
+    obst_avoid.point_1.velocity.x = cos(current_yaw_) * 1.5;
+    obst_avoid.point_1.velocity.y = sin(current_yaw_) * 1.5;
     obst_avoid.point_1.velocity.z = 0.0f;
     obst_avoid.point_1.yaw_rate = 0.0f;
   }
 
   // if there's no obstacle ahead, but we're not facing the goal, just yaw and/or climb/descend
-  else if (std::fabs(tf::getYaw(current_pose_.pose.orientation) -
+  else if (std::fabs(current_yaw_ -
                      (atan2(goal_pose_.pose.position.y - current_pose_.pose.position.y,
                             goal_pose_.pose.position.x - current_pose_.pose.position.x))) > FACING_GOAL_YAW_THR_RAD)
   {
+	  std::cout << "No obstacle ahead, but not facing goal" << std::endl;
     obst_avoid.point_1.velocity.x = 0.0f;
     obst_avoid.point_1.velocity.y = 0.0f;
-    obst_avoid.point_1.velocity.z = msg.point_1.velocity.z;
-    obst_avoid.point_1.yaw_rate = msg.point_1.yaw_rate;
+    obst_avoid.point_1.velocity.z = (goal_pose_.pose.position.z - current_pose_.pose.position.z)
+    		* DESIRED_SPEED_M_P_S;
+    obst_avoid.point_1.yaw_rate = wrapToPi(current_yaw_ - atan2(goal_pose_.pose.position.y - current_pose_.pose.position.y,
+                   goal_pose_.pose.position.x - current_pose_.pose.position.x)) * YAW_RATE_RAD_P_S;
   }
 
   // if there is no obstacle ahead, and it's been a while that there was, we can fly toward the goal
   else
   {
-    obst_avoid.point_1.velocity.x = msg.point_1.velocity.x * FRACTION_OF_DESIRED_SPEED;
-    obst_avoid.point_1.velocity.y = msg.point_1.velocity.y * FRACTION_OF_DESIRED_SPEED;
-    obst_avoid.point_1.velocity.z = msg.point_1.velocity.z;
-    obst_avoid.point_1.yaw_rate = msg.point_1.yaw_rate;
+	  std::cout << "No obstacle ahead, fly toward goal" << std::endl;
+    obst_avoid.point_1.velocity.x = x_dir_;
+    obst_avoid.point_1.velocity.y = y_dir_;
+    obst_avoid.point_1.velocity.z = z_dir_;
+    obst_avoid.point_1.yaw_rate = 0.0;
   }
 
   fillUnusedTrajectoryPoint(obst_avoid.point_2);
@@ -117,6 +132,21 @@ void BugPlanner::avoid(mavros_msgs::Trajectory& obst_avoid, const mavros_msgs::T
   fillUnusedTrajectoryPoint(obst_avoid.point_5);
   obst_avoid.time_horizon = { NAN, NAN, NAN, NAN, NAN };
   obst_avoid.point_valid = { true, false, false, false, false };
+
+  mavros_obstacle_free_path_pub_.publish(obst_avoid);
+  current_pose_pub_.publish(current_pose_);
+  goal_pose_pub_.publish(goal_pose_);
+
+}
+
+double BugPlanner::wrapToPi(const double& in){
+	double ret = in;
+    if (in>0)
+        ret = fmod(ret+M_PI, 2.0*M_PI)-M_PI;
+    else
+        ret = fmod(ret-M_PI, 2.0*M_PI)+M_PI;
+    return ret;
+
 }
 
 void BugPlanner::depthCameraCallback(const sensor_msgs::PointCloud2& msg)
@@ -151,7 +181,14 @@ int main(int argc, char** argv)
 {
   ros::init(argc, argv, "bug_planner");
   BugPlanner planner;
+  ros::Rate loop_rate(10.0);
 
+    while (ros::ok())
+    {
+      ros::spinOnce();
+      loop_rate.sleep();
+      planner.avoid();
+    }
   ros::spin();
   return 0;
 }
